@@ -23,7 +23,6 @@
 #include <dlfcn.h>
 #include <assert.h>
 
-
 #include <stdio.h>
 #include "LeakTracer_l.hpp"
 
@@ -33,7 +32,16 @@ extern "C" void  __libc_free(void* ptr) __attribute__((weak));
 extern "C" void* __libc_realloc(void *ptr, size_t size) __attribute__((weak));
 extern "C" void* __libc_calloc(size_t nmemb, size_t size) __attribute__((weak));
 
+extern int on;
+
 namespace leaktracer {
+
+  // NO Thread safe
+  void sigUsur1Handler(int)
+  {
+		fprintf(stderr, "Recording.......");
+    on = 1;
+  }
 
 typedef struct {
   const char *symbname;
@@ -69,12 +77,12 @@ void MemoryTrace::sigactionHandler(int sigNumber, siginfo_t *siginfo, void *arg)
 	(void)arg;
 	if (sigNumber == __sigStartAllThread)
 	{
-		TRACE((stderr, "MemoryTracer: signal %d received, starting monitoring\n", sigNumber));
+		fprintf(stderr, "MemoryTracer: signal %d received, starting monitoring\n", sigNumber);
 		leaktracer::MemoryTrace::GetInstance().startMonitoringAllThreads();
 	}
 	if (sigNumber == __sigStopAllThread)
 	{
-  		TRACE((stderr, "MemoryTracer: signal %d received, stoping monitoring\n", sigNumber));
+  		fprintf(stderr, "MemoryTracer: signal %d received, stoping monitoring\n", sigNumber);
 		leaktracer::MemoryTrace::GetInstance().stopAllMonitoring();
 	}
 	if (sigNumber == __sigReport)
@@ -84,7 +92,7 @@ void MemoryTrace::sigactionHandler(int sigNumber, siginfo_t *siginfo, void *arg)
 			reportFilename = "leaks.out";
 		else
 			reportFilename = getenv("LEAKTRACER_ONSIG_REPORTFILENAME");
-		TRACE((stderr, "MemoryTracer: signal %d received, writing report to %s\n", sigNumber, reportFilename));
+		fprintf(stderr, "MemoryTracer: signal %d received, writing report to %s\n", sigNumber, reportFilename);
 		leaktracer::MemoryTrace::GetInstance().writeLeaksToFile(reportFilename);
 	}
 }
@@ -114,10 +122,10 @@ MemoryTrace::init_no_alloc_allowed()
 			if (curfunc->libcsymbol) {
 				*curfunc->localredirect = curfunc->libcsymbol;
 			} else {
-				*curfunc->localredirect = dlsym(RTLD_NEXT, curfunc->symbname); 
+				*curfunc->localredirect = dlsym(RTLD_NEXT, curfunc->symbname);
 			}
 		}
-	} 
+	}
 
 	__instance = reinterpret_cast<MemoryTrace*>(&s_memoryTrace_instance);
 
@@ -157,6 +165,7 @@ MemoryTrace::init_full()
 #endif
 	}
 
+  /*
 	if (getenv("LEAKTRACER_ONSIG_STARTALLTHREAD"))
 	{
 		sigact.sa_sigaction = sigactionHandler;
@@ -165,7 +174,8 @@ MemoryTrace::init_full()
 		sigNumber = signalNumberFromString(getenv("LEAKTRACER_ONSIG_STARTALLTHREAD"));
 		__sigStartAllThread = sigNumber;
 		sigaction(sigNumber, &sigact, NULL);
-		TRACE((stderr, "LeakTracer: registered signal %d SIGSTART for tid %d\n", sigNumber, (pid_t) syscall (SYS_gettid)));
+    fprintf(stderr,  "Start all trhead");
+		fprintf(stderr, "LeakTracer: registered signal %d SIGSTART for tid %d\n", sigNumber, (pid_t) syscall (SYS_gettid));
 	}
 
 	if (getenv("LEAKTRACER_ONSIG_STOPALLTHREAD"))
@@ -176,8 +186,11 @@ MemoryTrace::init_full()
 		sigNumber = signalNumberFromString(getenv("LEAKTRACER_ONSIG_STOPALLTHREAD"));
 		__sigStopAllThread = sigNumber;
 		sigaction(sigNumber, &sigact, NULL);
-		TRACE((stderr, "LeakTracer: registered signal %d SIGSTOP for tid %d\n", sigNumber, (pid_t) syscall (SYS_gettid)));
+		fprintf(stderr, "LeakTracer: registered signal %d SIGSTOP for tid %d\n", sigNumber, (pid_t) syscall (SYS_gettid));
 	}
+  */
+
+  signal(SIGUSR1, sigUsur1Handler);
 
 	if (getenv("LEAKTRACER_ONSIG_REPORT"))
 	{
@@ -187,18 +200,18 @@ MemoryTrace::init_full()
 		sigNumber = signalNumberFromString(getenv("LEAKTRACER_ONSIG_REPORT"));
 		__sigReport = sigNumber;
 		sigaction(sigNumber, &sigact, NULL);
-		TRACE((stderr, "LeakTracer: registered signal %d SIGREPORT for tid %d\n", sigNumber, (pid_t) syscall (SYS_gettid)));
+		fprintf(stderr, "LeakTracer: registered signal %d SIGREPORT for tid %d\n", sigNumber, (pid_t) syscall (SYS_gettid));
 	}
+
+  leaktracer::MemoryTrace::GetInstance().startMonitoringAllThreads();
 
 	if (getenv("LEAKTRACER_ONSTART_STARTALLTHREAD") || getenv("LEAKTRACER_AUTO_REPORTFILENAME"))
 	{
-		leaktracer::MemoryTrace::GetInstance().startMonitoringAllThreads();
+		fprintf(stderr, "Start monitoring all threads");
 	}
-#ifdef USE_BACKTRACE
 	// we call backtrace here, because there is some init on its first call
 	void *bt;
 	backtrace(&bt, 1);
-#endif
 	__setupDone = true;
 
 	__monitoringDisabler--;
@@ -213,30 +226,32 @@ int MemoryTrace::Setup(void)
 	}
 #if 0
         else if (!leaktracer::MemoryTrace::GetInstance().__setupDone) {
-	}	
+	}
 #endif
 	return 0;
 }
 
 void MemoryTrace::MemoryTraceOnInit(void)
 {
-	//TRACE((stderr, "LeakTracer: MemoryTrace::MemoryTraceOnInit\n"));
+	//fprintf((stderr, "LeakTracer: MemoryTrace::MemoryTraceOnInit\n"));
 	leaktracer::MemoryTrace::Setup();
 }
 
 
 void MemoryTrace::MemoryTraceOnExit(void)
 {
+  fprintf(stderr, "-----------------------------> UNLOADING <------------------------");
+  fprintf(stderr, "exiting");
 	if (getenv("LEAKTRACER_ONEXIT_REPORT") || getenv("LEAKTRACER_AUTO_REPORTFILENAME"))
 	{
 		const char *reportName;
 		if ( !(reportName = getenv("LEAKTRACER_ONEXIT_REPORTFILENAME")) && !(reportName = getenv("LEAKTRACER_AUTO_REPORTFILENAME")))
 		{
-			TRACE((stderr, "LeakTracer: LEAKTRACER_ONEXIT_REPORTFILENAME needs to be defined when using LEAKTRACER_ONEXIT_REPORT\n"));
+			fprintf(stderr, "LeakTracer: LEAKTRACER_ONEXIT_REPORTFILENAME needs to be defined when using LEAKTRACER_ONEXIT_REPORT\n");
 			return;
 		}
 		leaktracer::MemoryTrace::GetInstance().stopAllMonitoring();
-		TRACE((stderr, "LeakTracer: writing leak report in %s\n", reportName));
+		fprintf(stderr, "LeakTracer: writing leak report in %s\n", reportName);
 		leaktracer::MemoryTrace::GetInstance().writeLeaksToFile(reportName);
 	}
 
@@ -244,9 +259,9 @@ void MemoryTrace::MemoryTraceOnExit(void)
 
 MemoryTrace::~MemoryTrace(void)
 {
+
 	pthread_key_delete(__thread_options_key);
 }
-
 
 
 // is called automatically when thread exists, whould
@@ -272,7 +287,6 @@ void MemoryTrace::removeThreadOptions(ThreadMonitoringOptions *pOptions)
 		}
 	}
 }
-
 
 // writes all memory leaks to given stream
 void MemoryTrace::writeLeaksPrivate(std::ostream &out)
@@ -313,14 +327,8 @@ void MemoryTrace::writeLeaksPrivate(std::ostream &out)
 		out << "leak, ";
 		out << "time="  << std::fixed << std::right << std::setprecision(precision) << std::setfill('0') << std::setw(maxsecwidth+1+precision) << d << ", "; // setw(16) ?
 		out << "stack=";
-		for (unsigned int i = 0; i < ALLOCATION_STACK_DEPTH; i++) {
-			if (info->allocStack[i] == NULL) break;
-
-			if (i > 0) out << ' ';
-			out << info->allocStack[i];
-		}
+		//out << info->allocStack;
 		out << ", ";
-
 		out << "size=" << info->size << ", ";
 
 		out << "data=";

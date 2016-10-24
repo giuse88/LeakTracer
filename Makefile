@@ -33,7 +33,7 @@ endif
 LIBLEAKTRACERPATH := libleaktracer
 
 # Common flags
-CXXFLAGS = -Wall -pthread
+CXXFLAGS = -std=c++0x -Wall -pthread -m32 
 ifeq ($(NOOPT),1)
 # with -O0, functions are not inlined, so it's harder to get the backtrace on some architecture
 # but you can use it if you want to debug leaktracer (if some could find the right optim option to pass to gcc to
@@ -57,7 +57,7 @@ CPPFLAGS += -DUSE_BACKTRACE
 DYNLIB_FLAGS=-fpic -DSHARED -Wl,-z,defs
 # timestamp support
 LD_FLAGS=-lrt
-LD_FLAGS+=  -ldl -lpthread
+LD_FLAGS+=  -ldl -lpthread -m32 -DUSE_BACKTRACE
 
 CXXFLAGS += $(EXTRA_CXXFLAGS)
 
